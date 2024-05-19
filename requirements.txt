@@ -1,0 +1,5 @@
+requests
+pandas
+yfinance
+numpy
+joblib
