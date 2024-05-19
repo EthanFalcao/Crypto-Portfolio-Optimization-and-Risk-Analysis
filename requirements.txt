@@ -3,3 +3,4 @@ pandas
 yfinance
 numpy
 joblib
+scikit-learn
