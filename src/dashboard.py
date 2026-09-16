@@ -20,6 +20,17 @@ sys.path.insert(0, project_root)
 import pandas as pd
 import streamlit as st
 
+# On Streamlit Community Cloud, TURSO_DATABASE_URL/TURSO_AUTH_TOKEN are set in
+# the app's "Secrets" box, which Streamlit exposes as st.secrets. Copy them
+# into the environment so src/config.py's plain os.environ.get() calls (used
+# both here and by every other script in this project) can find them too.
+# Locally, where there's no secrets.toml file, this just does nothing.
+try:
+    for key, value in st.secrets.items():
+        os.environ.setdefault(key, str(value))
+except Exception:
+    pass
+
 from src.db import load_df
 
 STRATEGY_DISPLAY_NAMES = {

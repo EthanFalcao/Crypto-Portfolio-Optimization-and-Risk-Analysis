@@ -35,8 +35,11 @@ LAG_PERIODS = [1, 3, 7]
 ROLLING_WINDOWS = [7, 30]
 
 # --- LSTM ---
+# Features and target are RETURNS (how much each one moved vs. the previous
+# close), not raw price levels - see src/model.py's module docstring for why.
 COIN = "BTC"
-LSTM_FEATURES = ["Close", "Open", "High", "Low", "Volume($)", "RSI", "MACD"]
+LSTM_FEATURES = ["close_return", "open_return", "high_return", "low_return", "volume_return", "RSI", "MACD"]
+LSTM_TARGET = "close_return"
 LSTM_WINDOW = 60
 TEST_FRACTION = 0.15
 

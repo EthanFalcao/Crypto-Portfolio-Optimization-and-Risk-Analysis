@@ -125,3 +125,27 @@ model comparisons, a real-time data pipeline.
    - `streamlit run src/dashboard.py` — dashboard (run `python -m src.backtest` first so it
      has something current to show)
    - `2. Exploratory Data Analysis.ipynb` and `4. Feature Selection.ipynb`
+
+## Deploying the dashboard
+
+The dashboard only reads from Turso - it doesn't need to run the pipeline itself - so it can
+be hosted for free on [Streamlit Community Cloud](https://share.streamlit.io):
+
+1. Push this repo to GitHub (already done if you're reading this there).
+2. At [share.streamlit.io](https://share.streamlit.io), sign in with GitHub and click
+   "New app". Point it at this repo, the branch you want to deploy, and set the main file
+   path to `src/dashboard.py`.
+3. In the app's **Settings → Secrets**, add:
+   ```toml
+   TURSO_DATABASE_URL = "libsql://..."
+   TURSO_AUTH_TOKEN = "..."
+   ```
+   (`COINGECKO_API_KEY` isn't needed for the dashboard - it only reads from Turso.)
+4. Deploy. Refresh the numbers it shows by running `python -m src.backtest` locally
+   (or on a schedule - see below) whenever you want the dashboard to reflect new data; it
+   doesn't retrain anything itself.
+
+**Keeping it current:** since the dashboard only shows what `src/backtest.py` last saved,
+consider a scheduled GitHub Action that runs `python -m src.main` and `python -m
+src.backtest` daily or weekly (the sibling Baleen project referenced in this project's
+history does exactly this) - not set up yet, see the roadmap below.
