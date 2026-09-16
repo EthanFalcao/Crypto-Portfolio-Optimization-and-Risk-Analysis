@@ -78,11 +78,11 @@ def run():
     print("Step 2: run each signal through the same Mean-Variance optimizer, same costs, same stop-loss.\n")
     results = {}
     for signal_name, predicted_return in signals.items():
-        strategy_returns = run_strategy(actual_close, actual_return, predicted_return, use_predictions=True)
+        strategy_returns, _ = run_strategy(actual_close, actual_return, predicted_return, use_predictions=True)
         metrics, _ = performance_metrics(strategy_returns)
         results[signal_name] = metrics
 
-    baseline_returns = run_strategy(actual_close, actual_return, lstm_predicted_return, use_predictions=False)
+    baseline_returns, _ = run_strategy(actual_close, actual_return, lstm_predicted_return, use_predictions=False)
     results["equal-weight (no predictions at all)"] = performance_metrics(baseline_returns)[0]
 
     for signal_name, metrics in results.items():

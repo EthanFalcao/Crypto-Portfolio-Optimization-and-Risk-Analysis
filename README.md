@@ -21,6 +21,12 @@ stop-loss rule - backtested against a naive equal-weight baseline.
 - `src/baseline_comparison.py` — sanity check: is the LSTM's predicted-return signal
   actually better than trivial guesses (no change, or "today repeats yesterday")? See
   below - `python -m src.baseline_comparison`
+- `src/momentum_multi_window.py` — re-tests the momentum signal across several historical
+  windows instead of just the most recent one: `python -m src.momentum_multi_window`
+- `src/dashboard.py` — Streamlit dashboard: current allocation + equity curve for each
+  strategy, click-through in the sidebar: `streamlit run src/dashboard.py`. Reads whatever
+  `src/backtest.py` last saved - it does not retrain the LSTM live (that takes 10+ minutes),
+  so run `python -m src.backtest` first to refresh the numbers it shows.
 - `src/main.py` — runs fetch → features → single-coin LSTM in order: `python -m src.main`
 
 `1. Data Preprocessing.ipynb`, `3. Feature Engineering.ipynb`, and
@@ -61,17 +67,38 @@ and a naive momentum guess ("today repeats yesterday"). The result was clarifyin
 | equal-weight (no signal at all) | n/a | +20.4% |
 
 The LSTM isn't just unhelpful, it's the *worst* signal of the four - worse than guessing
-zero. Simple momentum, which took an afternoon to add as a sanity check, beat everything
-else by a wide margin. **The likely actual source of edge in this window was momentum, not
-the LSTM** - a good reminder to sanity-check a model against trivial baselines before trusting
-it. Caveat: this is one 180-day window: momentum's strength here could be specific to this
-stretch rather than a persistent effect, and the LSTM's exact number varies run to run since
-its training is stochastic (different random weight init each time) - the qualitative result
-(LSTM signal is uninformative to slightly harmful) held across both runs, though.
+zero. Momentum, which took an afternoon to add as a sanity check, beat everything else by a
+wide margin **in that one window**. The LSTM's exact number also varies run to run since its
+training is stochastic (different random weight init each time) - the qualitative result
+(LSTM signal is uninformative to slightly harmful) held across repeated runs, though.
 
-**Not implemented yet:** testing the above across multiple time windows (walk-forward, to
-see if momentum's edge holds up or was specific to this stretch), predicting returns
-directly instead of price levels, ARIMA/XGBoost model comparisons, a real-time data pipeline.
+**But that single window overclaimed momentum's edge - `src/momentum_multi_window.py`
+re-tested momentum vs. equal-weight across 7 separate, non-overlapping 180-day windows
+(the full ~3.8 years of shared history this 14-coin universe has) instead of just the most
+recent one:**
+
+| window | momentum | equal-weight | winner |
+|---|---|---|---|
+| 2023-04 to 2023-09 | -28.8% | -5.8% | equal-weight |
+| 2023-10 to 2024-03 | +109.0% | +86.4% | momentum |
+| 2024-03 to 2024-09 | -19.5% | -13.3% | equal-weight |
+| 2024-09 to 2025-03 | +45.1% | +66.6% | equal-weight |
+| 2025-03 to 2025-09 | +16.9% | +34.6% | equal-weight |
+| 2025-09 to 2026-03 | +51.3% | -14.5% | momentum |
+| 2026-03 to 2026-09 | +50.5% | +22.8% | momentum |
+
+**Momentum only beat equal-weight in 3 of 7 windows.** The single-window result above was
+one of momentum's best two windows, not a representative one - a clean example of why
+"picked the most recent backtest" is a form of cherry-picking even when nothing was
+deliberately cherry-picked. Averaged across all 7 windows momentum's mean return is somewhat
+higher (32.1% vs. 25.3%), but it's also swingier in both directions (its best window +109%,
+its worst -28.8%, vs. equal-weight's +86.4%/-13.3%) - consistent with "more aggressive,
+higher variance," not "reliably better." **Conclusion: neither the LSTM nor simple momentum
+has demonstrated a durable edge over naive diversification in this universe** - the honest
+state of this project right now is that nothing built so far reliably beats equal-weight.
+
+**Not implemented yet:** predicting returns directly instead of price levels, ARIMA/XGBoost
+model comparisons, a real-time data pipeline.
 
 ## Setup
 
@@ -94,4 +121,7 @@ directly instead of price levels, ARIMA/XGBoost model comparisons, a real-time d
    - `python -m src.backtest` — Mean-Variance vs. equal-weight backtest (saves a chart to
      `backtest_equity_curve.png`)
    - `python -m src.baseline_comparison` — checks the LSTM's signal against trivial baselines
+   - `python -m src.momentum_multi_window` — re-tests momentum across multiple time windows
+   - `streamlit run src/dashboard.py` — dashboard (run `python -m src.backtest` first so it
+     has something current to show)
    - `2. Exploratory Data Analysis.ipynb` and `4. Feature Selection.ipynb`
