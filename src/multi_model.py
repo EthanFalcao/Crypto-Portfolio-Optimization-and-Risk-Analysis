@@ -48,10 +48,10 @@ def run():
         return results
 
     results_df = pd.DataFrame(results)
-    results_df = results_df.sort_values("mape")
+    results_df = results_df.sort_values("correlation", ascending=False)
     save_df(results_df, "model_metrics")
 
-    print("\nPer-coin results, best (lowest MAPE) first:")
+    print("\nPer-coin results, best (highest correlation between predicted and actual return) first:")
     print(results_df.to_string(index=False))
     return results
 
