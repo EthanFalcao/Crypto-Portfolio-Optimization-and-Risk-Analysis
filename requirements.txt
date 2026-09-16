@@ -1,12 +1,4 @@
 pandas
-numpy
-requests
-yfinance
-scikit-learn
-matplotlib
-seaborn
-statsmodels
-tensorflow
-python-dotenv
-libsql
 streamlit
+libsql
+python-dotenv

@@ -160,8 +160,15 @@ now is that nothing built so far reliably beats equal-weight.
    cd Crypto-Portfolio-Optimization-and-Risk-Analysis
    python -m venv .venv
    .venv/Scripts/activate   # or `source .venv/bin/activate` on macOS/Linux
-   pip install -r requirements.txt
+   pip install -r requirements.txt -r requirements-ml.txt
    ```
+   `requirements.txt` alone (pandas, streamlit, libsql, python-dotenv) is everything
+   `src/dashboard.py` needs; `requirements-ml.txt` has the heavier fetch/feature/model stack
+   (numpy, tensorflow, scikit-learn, ...) that only the pipeline scripts need. They're split
+   because Streamlit Community Cloud installs the whole of `requirements.txt` for every
+   deploy, and pulling in TensorFlow there for an app that never imports it is unnecessary
+   and (at least as of this writing) breaks entirely on Cloud's Python version - see
+   "Deploying the dashboard" below. For local work, install both.
 2. Copy `.env.example` to `.env` and fill in:
    - `COINGECKO_API_KEY` — free key from [coingecko.com](https://www.coingecko.com/en/api).
    - `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` — create a free database at
@@ -197,6 +204,15 @@ be hosted for free on [Streamlit Community Cloud](https://share.streamlit.io):
 4. Deploy. Refresh the numbers it shows by running `python -m src.backtest` locally
    (or on a schedule - see below) whenever you want the dashboard to reflect new data; it
    doesn't retrain anything itself.
+
+**If the deploy fails with a TensorFlow/dependency error:** Streamlit Cloud installs
+`requirements.txt` in full, and as of this writing TensorFlow doesn't publish wheels for the
+Python version Cloud defaults to, so a `requirements.txt` containing `tensorflow` fails to
+install there even though `src/dashboard.py` never imports it. This is why `requirements.txt`
+only lists the dashboard's actual dependencies (pandas, streamlit, libsql, python-dotenv) and
+the heavier ML stack lives in `requirements-ml.txt` instead - if your deploy still references
+the old combined file, push the split version and redeploy (Manage app → Reboot, or a new
+commit will trigger it automatically).
 
 **Keeping it current:** since the dashboard only shows what `src/backtest.py` last saved,
 consider a scheduled GitHub Action that runs `python -m src.main` and `python -m
