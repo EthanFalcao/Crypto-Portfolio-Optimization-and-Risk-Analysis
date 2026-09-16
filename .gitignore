@@ -1,0 +1,17 @@
+# Environment / secrets
+.env
+
+# Data (source of truth is Turso; this is just the local synced replica)
+data/*.csv
+*.joblib
+local_replica.db*
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db

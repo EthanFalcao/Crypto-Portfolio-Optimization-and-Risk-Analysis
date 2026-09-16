@@ -1,11 +1,12 @@
 
 # Next Steps
 
-Featrure selction 
+Feature selection - done, see "4. Feature Selection.ipynb"
 
- Predictive Modeling(ml step)
-Machine Learning Models: Experiment with various machine learning models to predict future returns or price movements. Models can range from traditional ones like ARIMA, LSTM (Long Short-Term Memory networks), to more complex deep learning models.
-Evaluation: Use appropriate metrics (e.g., RMSE for regression tasks, accuracy for classification, etc.) to evaluate model performance. Also, consider the specific nature of financial returns and risk (e.g., Sharpe Ratio, Maximum Drawdown) in your evaluation.
+Predictive Modeling (ml step) - done for a single coin (BTC), see "5. Predictive Modeling(ML).ipynb":
+an LSTM (Keras) predicting next-day close, time-based train/test split, RMSE/MAE/MAPE reported.
+Not done yet: ARIMA/XGBoost comparison, extending the LSTM to more than one coin.
+
 5. Optimization Algorithm
 Dynamic Allocation: Implement an optimization algorithm that can adjust allocations dynamically based on the predictive models' outputs. Techniques such as the Kelly Criterion, Mean-Variance Optimization, or even more sophisticated machine learning-driven methods could be applied.
 Risk Management: Incorporate measures to manage risk, such as setting maximum exposure limits to specific assets, incorporating stop-loss strategies, or using derivatives for hedging.
