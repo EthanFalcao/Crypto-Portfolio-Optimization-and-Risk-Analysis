@@ -24,6 +24,8 @@ dashboard to browse the results.
   below - `python -m src.baseline_comparison`
 - `src/momentum_multi_window.py` — re-tests the momentum signal across several historical
   windows instead of just the most recent one: `python -m src.momentum_multi_window`
+- `src/lstm_multi_window.py` — same idea for the LSTM (with a caveat - see below):
+  `python -m src.lstm_multi_window`
 - `src/dashboard.py` — Streamlit dashboard: equity curve, current portfolio allocation, and
   how that allocation changed over time, for each strategy, click-through in the sidebar:
   `streamlit run src/dashboard.py`. Reads whatever `src/backtest.py` last saved - it does
@@ -112,13 +114,43 @@ one of momentum's best two windows, not a representative one - a clean example o
 deliberately cherry-picked. Averaged across all 7 windows momentum's mean return is somewhat
 higher (32.1% vs. 25.3%), but it's also swingier in both directions (its best window +109%,
 its worst -28.8%, vs. equal-weight's +86.4%/-13.3%) - consistent with "more aggressive,
-higher variance," not "reliably better." **Conclusion: neither the LSTM nor simple momentum
-has demonstrated a durable edge over naive diversification in this universe** - the honest
-state of this project right now is that nothing built so far reliably beats equal-weight.
+higher variance," not "reliably better."
 
-**Not implemented yet:** re-testing the LSTM itself across multiple historical windows the
-way momentum was (to see whether its instability is a property of this one window or
-inherent to training it at all), ARIMA/XGBoost model comparisons, a real-time data pipeline.
+**`src/lstm_multi_window.py`** does the same test for the LSTM. It's a weaker test than
+momentum's version, worth being upfront about: retraining a fresh LSTM per window (14 coins
+x 7 windows = 98 trainings) was too slow to be practical, so each coin's LSTM was trained
+once on its earliest available data and that one model's predictions were sliced across the
+same 7 windows - i.e. this measures "how did one early-trained, never-updated model do
+across later stretches of time," not a periodically-retrained model:
+
+| window | LSTM | equal-weight | winner |
+|---|---|---|---|
+| 2023-04 to 2023-09 | -11.1% | -5.8% | equal-weight |
+| 2023-10 to 2024-03 | **+301.3%** | +86.4% | LSTM |
+| 2024-03 to 2024-09 | -25.0% | -13.3% | equal-weight |
+| 2024-09 to 2025-03 | +142.5% | +66.6% | LSTM |
+| 2025-03 to 2025-09 | +51.6% | +34.6% | LSTM |
+| 2025-09 to 2026-03 | **-36.4%** | -14.5% | equal-weight |
+| 2026-03 to 2026-09 | +10.5% | +22.8% | equal-weight |
+
+**LSTM beat equal-weight in 3 of 7 windows - the same count as momentum.** But look at the
+spread: -36.4% to +301.3%, dwarfing momentum's already-wide -28.8%/+109.0% range. The
+average LSTM return across windows (+61.9%) looks great, but the *median* is +10.5% - the
+mean is almost 6x the median, entirely because of that one +301% window. (Equal-weight's
+mean and median are +25.3% and +22.8% - close together, as a normal, non-outlier-driven
+result should be.) A +301% single-window return from a "cap any one coin at 35%" strategy
+isn't what real, modest skill looks like - it's what a lottery ticket that happened to hit
+looks like, fully consistent with the ~0 correlation numbers already established. Reporting
+the mean here without the median would have been exactly the kind of misleading, technically-
+true-but-cherry-picked framing this project has tried to avoid throughout.
+
+**Conclusion: neither the LSTM nor simple momentum has demonstrated a durable edge over
+naive diversification in this universe.** Both win about 3 times in 7, both have much wider
+outcome spreads than equal-weight, and the LSTM's spread is wide enough that its own average
+result is misleading without the median next to it. The honest state of this project right
+now is that nothing built so far reliably beats equal-weight.
+
+**Not implemented yet:** ARIMA/XGBoost model comparisons, a real-time data pipeline.
 
 ## Setup
 
@@ -142,6 +174,7 @@ inherent to training it at all), ARIMA/XGBoost model comparisons, a real-time da
      `backtest_equity_curve.png`)
    - `python -m src.baseline_comparison` — checks the LSTM's signal against trivial baselines
    - `python -m src.momentum_multi_window` — re-tests momentum across multiple time windows
+   - `python -m src.lstm_multi_window` — re-tests the LSTM across multiple time windows
    - `streamlit run src/dashboard.py` — dashboard (run `python -m src.backtest` first so it
      has something current to show)
    - `2. Exploratory Data Analysis.ipynb` and `4. Feature Selection.ipynb`
