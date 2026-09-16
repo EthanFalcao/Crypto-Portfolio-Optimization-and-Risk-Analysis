@@ -95,17 +95,24 @@ def find_stopped_out_coins(price_history, today_index):
 
 def run_strategy(actual_close, actual_return, predicted_return, use_predictions):
     """Simulate rebalancing once a day. If use_predictions is False, this is
-    the equal-weight baseline (still subject to the same stop-loss + costs)."""
+    the equal-weight baseline (still subject to the same stop-loss + costs).
+
+    Returns (daily_portfolio_returns, daily_weights) - daily_weights is a
+    DataFrame (one row per day, one column per coin) so a dashboard can show
+    what the portfolio actually held on any given day, not just the P&L.
+    """
     all_coins = list(actual_return.columns)
     all_dates = actual_return.index
 
     previous_weights = pd.Series(0.0, index=all_coins)
     daily_portfolio_returns = []
+    daily_weights = []
 
     for day_index, today in enumerate(all_dates):
         if day_index == 0:
             # No history yet to base a decision on - sit out day 1.
             daily_portfolio_returns.append(0.0)
+            daily_weights.append(previous_weights.copy())
             continue
 
         stopped_out = find_stopped_out_coins(actual_close, day_index)
@@ -158,9 +165,12 @@ def run_strategy(actual_close, actual_return, predicted_return, use_predictions)
         portfolio_return_today = (full_weights * todays_market_returns).sum() - trading_cost
 
         daily_portfolio_returns.append(portfolio_return_today)
+        daily_weights.append(full_weights.copy())
         previous_weights = full_weights
 
-    return pd.Series(daily_portfolio_returns, index=all_dates)
+    returns_series = pd.Series(daily_portfolio_returns, index=all_dates)
+    weights_df = pd.DataFrame(daily_weights, index=all_dates)
+    return returns_series, weights_df
 
 
 def performance_metrics(daily_returns):
@@ -192,50 +202,79 @@ def performance_metrics(daily_returns):
 
 
 def run():
+    """Run all three strategies (LSTM-driven, momentum-driven, equal-weight)
+    over the shared backtest window, print an honest comparison, and save
+    everything a dashboard would need (summary metrics, day-by-day portfolio
+    value, and today's weights) to Turso."""
     df = load_df("engineered_features")
     df["Date"] = df["Date"].astype("datetime64[ns]")
     most_recent_date = df["Date"].max()
     cutoff_date = most_recent_date - pd.Timedelta(days=config.BACKTEST_WINDOW_DAYS)
 
     actual_close, predicted_close = build_aligned_predictions(cutoff_date)
-    actual_return, predicted_return = compute_returns(actual_close, predicted_close)
+    actual_return, lstm_predicted_return = compute_returns(actual_close, predicted_close)
+    momentum_predicted_return = actual_return.shift(1)
 
-    print("\nRunning the Mean-Variance strategy...")
-    strategy_returns = run_strategy(actual_close, actual_return, predicted_return, use_predictions=True)
+    print("\nRunning the LSTM-driven Mean-Variance strategy...")
+    lstm_returns, lstm_weights = run_strategy(actual_close, actual_return, lstm_predicted_return, use_predictions=True)
+
+    print("Running the momentum-driven Mean-Variance strategy...")
+    momentum_returns, momentum_weights = run_strategy(actual_close, actual_return, momentum_predicted_return, use_predictions=True)
 
     print("Running the equal-weight baseline...")
-    baseline_returns = run_strategy(actual_close, actual_return, predicted_return, use_predictions=False)
+    equal_weight_returns, equal_weight_weights = run_strategy(actual_close, actual_return, lstm_predicted_return, use_predictions=False)
 
-    strategy_metrics, strategy_value = performance_metrics(strategy_returns)
-    baseline_metrics, baseline_value = performance_metrics(baseline_returns)
+    strategies = {
+        "lstm": (lstm_returns, lstm_weights),
+        "momentum": (momentum_returns, momentum_weights),
+        "equal_weight": (equal_weight_returns, equal_weight_weights),
+    }
 
     print(f"\nBacktest window: {cutoff_date.date()} to {most_recent_date.date()} ({len(actual_return)} days)")
     print(f"Coins used: {list(actual_return.columns)}")
     print()
-    print("Mean-Variance strategy vs. equal-weight baseline (same coins, same costs):")
-    for metric_name in ["total_return", "annualized_return", "sharpe_ratio", "max_drawdown"]:
-        strategy_number = strategy_metrics[metric_name]
-        baseline_number = baseline_metrics[metric_name]
-        print(f"  {metric_name}: mean-variance = {strategy_number:.4f}, equal-weight = {baseline_number:.4f}")
 
-    results_to_save = pd.DataFrame([
-        {"strategy": "mean_variance", "n_days": len(strategy_returns), "run_at": pd.Timestamp.now(), **strategy_metrics},
-        {"strategy": "equal_weight", "n_days": len(baseline_returns), "run_at": pd.Timestamp.now(), **baseline_metrics},
-    ])
-    save_df(results_to_save, "backtest_results")
+    results_rows = []
+    equity_curve_rows = []
+    latest_weight_rows = []
+    portfolio_values_by_strategy = {}
+    run_time = pd.Timestamp.now()
+
+    for strategy_name, (daily_returns, daily_weights) in strategies.items():
+        metrics, portfolio_value = performance_metrics(daily_returns)
+        print(f"{strategy_name}: total_return = {metrics['total_return']:.4f}, "
+              f"sharpe_ratio = {metrics['sharpe_ratio']:.4f}")
+
+        portfolio_values_by_strategy[strategy_name] = portfolio_value
+        results_rows.append({"strategy": strategy_name, "n_days": len(daily_returns), "run_at": run_time, **metrics})
+
+        for date, value in portfolio_value.items():
+            equity_curve_rows.append({"strategy": strategy_name, "date": date, "portfolio_value": value})
+
+        latest_weights = daily_weights.iloc[-1]
+        for coin, weight in latest_weights.items():
+            latest_weight_rows.append({
+                "strategy": strategy_name, "coin": coin, "weight": weight,
+                "as_of_date": daily_weights.index[-1], "run_at": run_time,
+            })
+
+    save_df(pd.DataFrame(results_rows), "backtest_results")
+    save_df(pd.DataFrame(equity_curve_rows), "backtest_equity_curve")
+    save_df(pd.DataFrame(latest_weight_rows), "backtest_latest_weights")
+    print("\nSaved backtest_results, backtest_equity_curve, and backtest_latest_weights to Turso")
 
     plt.figure(figsize=(10, 6))
-    plt.plot(strategy_value.index, strategy_value, label="Mean-Variance strategy")
-    plt.plot(baseline_value.index, baseline_value, label="Equal-weight baseline")
+    for strategy_name, portfolio_value in portfolio_values_by_strategy.items():
+        plt.plot(portfolio_value.index, portfolio_value, label=strategy_name)
     plt.title("Portfolio value over the backtest window (starting at 1.0)")
     plt.xlabel("Date")
     plt.ylabel("Portfolio value")
     plt.legend()
     plt.tight_layout()
     plt.savefig("backtest_equity_curve.png")
-    print("\nSaved chart to backtest_equity_curve.png")
+    print("Saved chart to backtest_equity_curve.png")
 
-    return strategy_metrics, baseline_metrics
+    return results_rows
 
 
 if __name__ == "__main__":
