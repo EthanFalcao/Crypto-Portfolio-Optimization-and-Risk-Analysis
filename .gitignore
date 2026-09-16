@@ -5,6 +5,7 @@
 data/*.csv
 *.joblib
 local_replica.db*
+backtest_equity_curve.png
 
 # Python
 __pycache__/

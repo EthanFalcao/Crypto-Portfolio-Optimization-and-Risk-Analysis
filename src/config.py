@@ -39,3 +39,22 @@ COIN = "BTC"
 LSTM_FEATURES = ["Close", "Open", "High", "Low", "Volume($)", "RSI", "MACD"]
 LSTM_WINDOW = 60
 TEST_FRACTION = 0.15
+
+# --- Portfolio: modeling universe ---
+# Always ~$1 - "predicting" it is meaningless, and a near-zero-variance asset
+# breaks Mean-Variance's covariance math. Excluded from modeling/optimization
+# only; still present in raw_prices/engineered_features.
+STABLECOINS = ["USDT", "USDC", "USDS"]
+
+# --- Backtest ---
+BACKTEST_WINDOW_DAYS = 180
+COV_LOOKBACK_DAYS = 30
+
+# --- Optimizer (Mean-Variance) ---
+RISK_AVERSION = 3.0
+MAX_ASSET_WEIGHT = 0.35  # also the "max exposure" risk limit
+TRANSACTION_COST_BPS = 10
+
+# --- Risk management: trailing stop-loss ---
+STOP_LOSS_DRAWDOWN = 0.15
+STOP_LOSS_LOOKBACK_DAYS = 30
