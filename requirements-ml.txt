@@ -1,0 +1,8 @@
+numpy
+requests
+yfinance
+scikit-learn
+matplotlib
+seaborn
+statsmodels
+tensorflow
