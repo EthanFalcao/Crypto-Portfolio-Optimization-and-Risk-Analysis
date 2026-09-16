@@ -205,7 +205,8 @@ def run():
     """Run all three strategies (LSTM-driven, momentum-driven, equal-weight)
     over the shared backtest window, print an honest comparison, and save
     everything a dashboard would need (summary metrics, day-by-day portfolio
-    value, and today's weights) to Turso."""
+    value, and day-by-day weights - what the portfolio held, and how that
+    changed over time) to Turso."""
     df = load_df("engineered_features")
     df["Date"] = df["Date"].astype("datetime64[ns]")
     most_recent_date = df["Date"].max()
@@ -236,7 +237,7 @@ def run():
 
     results_rows = []
     equity_curve_rows = []
-    latest_weight_rows = []
+    daily_weight_rows = []
     portfolio_values_by_strategy = {}
     run_time = pd.Timestamp.now()
 
@@ -251,17 +252,17 @@ def run():
         for date, value in portfolio_value.items():
             equity_curve_rows.append({"strategy": strategy_name, "date": date, "portfolio_value": value})
 
-        latest_weights = daily_weights.iloc[-1]
-        for coin, weight in latest_weights.items():
-            latest_weight_rows.append({
-                "strategy": strategy_name, "coin": coin, "weight": weight,
-                "as_of_date": daily_weights.index[-1], "run_at": run_time,
-            })
+        # Every day's weights, not just the latest - so a dashboard can show
+        # how the portfolio's composition changed over time, not just a
+        # single snapshot.
+        for date, weights_that_day in daily_weights.iterrows():
+            for coin, weight in weights_that_day.items():
+                daily_weight_rows.append({"strategy": strategy_name, "date": date, "coin": coin, "weight": weight})
 
     save_df(pd.DataFrame(results_rows), "backtest_results")
     save_df(pd.DataFrame(equity_curve_rows), "backtest_equity_curve")
-    save_df(pd.DataFrame(latest_weight_rows), "backtest_latest_weights")
-    print("\nSaved backtest_results, backtest_equity_curve, and backtest_latest_weights to Turso")
+    save_df(pd.DataFrame(daily_weight_rows), "backtest_daily_weights")
+    print("\nSaved backtest_results, backtest_equity_curve, and backtest_daily_weights to Turso")
 
     plt.figure(figsize=(10, 6))
     for strategy_name, portfolio_value in portfolio_values_by_strategy.items():

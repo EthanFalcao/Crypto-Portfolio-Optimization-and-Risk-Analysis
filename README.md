@@ -1,9 +1,10 @@
 # Crypto-Portfolio-Optimization-and-Risk-Analysis
 
 A pipeline that pulls historical price data for the top cryptocurrencies, engineers
-technical-indicator features, trains an LSTM (Keras) per coin to predict next-day closing
-price, and runs those predictions through a Mean-Variance portfolio optimizer with a simple
-stop-loss rule - backtested against a naive equal-weight baseline.
+technical-indicator features, trains an LSTM (Keras) per coin to predict next-day *return*,
+and runs those predictions through a Mean-Variance portfolio optimizer with a simple
+stop-loss rule - backtested against a naive equal-weight baseline, with a Streamlit
+dashboard to browse the results.
 
 ## Layout
 
@@ -23,10 +24,11 @@ stop-loss rule - backtested against a naive equal-weight baseline.
   below - `python -m src.baseline_comparison`
 - `src/momentum_multi_window.py` — re-tests the momentum signal across several historical
   windows instead of just the most recent one: `python -m src.momentum_multi_window`
-- `src/dashboard.py` — Streamlit dashboard: current allocation + equity curve for each
-  strategy, click-through in the sidebar: `streamlit run src/dashboard.py`. Reads whatever
-  `src/backtest.py` last saved - it does not retrain the LSTM live (that takes 10+ minutes),
-  so run `python -m src.backtest` first to refresh the numbers it shows.
+- `src/dashboard.py` — Streamlit dashboard: equity curve, current portfolio allocation, and
+  how that allocation changed over time, for each strategy, click-through in the sidebar:
+  `streamlit run src/dashboard.py`. Reads whatever `src/backtest.py` last saved - it does
+  not retrain the LSTM live (that takes 10+ minutes), so run `python -m src.backtest` first
+  to refresh the numbers it shows.
 - `src/main.py` — runs fetch → features → single-coin LSTM in order: `python -m src.main`
 
 `1. Data Preprocessing.ipynb`, `3. Feature Engineering.ipynb`, and
@@ -46,36 +48,53 @@ used to inform the pipeline, not part of it.
 - A backtest comparing that strategy to naive equal-weight diversification, including
   trading costs
 
-**Honest result, not a cherry-picked one:** over the last 180 days (14 coins with enough
-history), the Mean-Variance strategy driven by the LSTM's predictions **lost money**
-(total return roughly -0.5% to -9% across two separate runs - see below on why it isn't
-exactly reproducible) while a naive equal-weight baseline **made money** (+20.4%, Sharpe
-1.11). This isn't a bug - checked that the optimizer's weights are valid (sum to 1, respect
-the cap) - it's a real finding: the LSTM predicts next-day *price* well (2-10% MAPE per
-coin), but the day-to-day *return* implied by those predictions doesn't correlate with what
-actually happens (overall correlation **-0.06**, i.e. slightly worse than a coin flip).
+**The LSTM originally predicted next-day *price*, which looked accurate (2-10% MAPE per
+coin) but wasn't a real signal** - a price series barely moves day to day, so a model can
+get a low price error just by roughly repeating today's value, without predicting anything.
+It's been rebuilt (`src/model.py`) to predict next-day *return* directly instead, which is
+harder to fake and is what the portfolio optimizer actually needs.
 
-**`src/baseline_comparison.py` digs into this further**, by feeding three different signals
-into the exact same optimizer/costs/stop-loss: the LSTM, always guessing "no change" (0%),
-and a naive momentum guess ("today repeats yesterday"). The result was clarifying:
+**Per-coin correlation is still close to zero even with the corrected model**
+(`python -m src.multi_model`, all 14 coins): best is WBT at **+0.06**, several are negative
+(DOGE -0.02, ETH -0.009, ADA -0.003), and directional accuracy sits at 45-55% across the
+board - a coin flip. The LSTM does not have demonstrated real predictive skill for any of
+these coins, honestly measured this time (not via the misleading price metric above).
 
-| signal | correlation with actual return | total return |
-|---|---|---|
-| LSTM | -0.067 | -0.5% |
-| predict no change | undefined (constant) | +8.6% |
-| **momentum (yesterday's return)** | **+0.083** | **+49.2%** |
-| equal-weight (no signal at all) | n/a | +20.4% |
+**The backtest result is unstable in a way that itself confirms the above.** Three separate
+runs of the exact same corrected model, on the exact same data, gave the LSTM strategy
+**+14.0% (Sharpe 0.78)**, **+50.8% (Sharpe 1.92)**, and **+66.0% (Sharpe 1.91)** - nothing
+changed between runs except the random weight initialization Keras starts training from.
+When a model's backtest P&L swings that widely between runs with literally the same code
+and data, that's a sign the result is dominated by which random pattern the optimizer
+happened to concentrate into, not by learned skill - consistent with the ~0 correlation
+number above. A real edge would be expected to reproduce far more consistently run to run.
+(For reference, momentum and equal-weight - which don't involve any random training - are
+exactly reproducible: every run gives the same number.)
 
-The LSTM isn't just unhelpful, it's the *worst* signal of the four - worse than guessing
-zero. Momentum, which took an afternoon to add as a sanity check, beat everything else by a
-wide margin **in that one window**. The LSTM's exact number also varies run to run since its
-training is stochastic (different random weight init each time) - the qualitative result
-(LSTM signal is uninformative to slightly harmful) held across repeated runs, though.
+**`src/baseline_comparison.py`**, re-run with the corrected model, confirms the same
+picture from a different angle - it compares the LSTM against two trivial signals ("predict
+no change" and momentum) on the same optimizer/costs/stop-loss:
 
-**But that single window overclaimed momentum's edge - `src/momentum_multi_window.py`
-re-tested momentum vs. equal-weight across 7 separate, non-overlapping 180-day windows
-(the full ~3.8 years of shared history this 14-coin universe has) instead of just the most
-recent one:**
+| signal | correlation with actual return | MAE | total return |
+|---|---|---|---|
+| LSTM | +0.006 | 0.0211 | +50.8% (see instability note above) |
+| predict no change | undefined (constant) | **0.0207** | +8.6% |
+| **momentum (yesterday's return)** | **+0.083** | 0.0294 | +49.2% |
+| equal-weight (no signal at all) | n/a | n/a | +20.4% |
+
+The LSTM's correlation is closer to zero than useful in either direction now (+0.006, up
+from -0.067 with the old price-based model, but still not meaningfully different from no
+signal at all) - and its error (MAE) is actually slightly *worse* than just guessing "no
+change." Its backtest return looks competitive with momentum here, but per the instability
+note above, that number isn't trustworthy on its own - a different training run gave +14.0%
+using the identical setup. Momentum remains the one signal with a real (if modest) positive
+correlation to what actually happens, though see the multi-window test below for why even
+that shouldn't be taken as a proven edge.
+
+**`src/momentum_multi_window.py`** doesn't involve the LSTM at all, so its result still
+stands: it re-tested the momentum signal (which looked strong in a single recent backtest)
+across 7 separate, non-overlapping 180-day windows - the full ~3.8 years of shared history
+this 14-coin universe has - instead of just the most recent one:
 
 | window | momentum | equal-weight | winner |
 |---|---|---|---|
@@ -97,8 +116,9 @@ higher variance," not "reliably better." **Conclusion: neither the LSTM nor simp
 has demonstrated a durable edge over naive diversification in this universe** - the honest
 state of this project right now is that nothing built so far reliably beats equal-weight.
 
-**Not implemented yet:** predicting returns directly instead of price levels, ARIMA/XGBoost
-model comparisons, a real-time data pipeline.
+**Not implemented yet:** re-testing the LSTM itself across multiple historical windows the
+way momentum was (to see whether its instability is a property of this one window or
+inherent to training it at all), ARIMA/XGBoost model comparisons, a real-time data pipeline.
 
 ## Setup
 
